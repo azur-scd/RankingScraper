@@ -26,13 +26,14 @@ L'outil :
 
 - OS Windows
 - Firefox installé
-- Extension geckodriver isntallée
+- Extension geckodriver installée ((https://github.com/mozilla/geckodriver/releases)[https://github.com/mozilla/geckodriver/releases])
 
 ### Releases
 
 - Télécharger la dernière release 
-- Installer n'importe où sur son PC (dans un emplacement accessible en écriture pour que le fichier de logs puisse s'incrémenter)
+- Dézipper et installer n'importe où sur son PC (dans un emplacement accessible en écriture pour que le fichier de logs puisse s'incrémenter)
 - Double-cliquer pour lancer l'application
+- Accessoirement créer un raccourci clic droit sur RnakingScrapper.exe -> Envoyer vers ...
 
 
 ## [Dev] 
