@@ -11,7 +11,10 @@
 ###################
 .devcontainer
 .vscode
+build/
 
-# Ignore log files
+
+# Ignore log and exe files
 ###################
 *.log
+*.exe
