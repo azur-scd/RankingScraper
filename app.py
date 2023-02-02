@@ -44,7 +44,7 @@ def sub_scrap_shangai_table(browser,ranking, criteria_label, result):
         temp_dict[f"{criteria_label}_score"] = param_score.text.strip()
         result.append(temp_dict)
 
-def get_shangai_data(tk_container,year="2022", ranking="arwu", max_pages=None):
+def get_shangai_data(tk_container,year=None, ranking=None, max_pages=None):
     browser = webdriver.Firefox()
     browser.set_window_position(0, 0)
     browser.set_window_size(200, 200)
@@ -62,15 +62,17 @@ def get_shangai_data(tk_container,year="2022", ranking="arwu", max_pages=None):
     for item_key,item_value in rankings_criteria_params[f"{ranking}_criteria_params"].items():
         tk_container.insert(tkinter.END, "Scraping launched for "+ item_value + "...\n\n")
         app.update()
-        try:
-            browser.find_element(by = By.XPATH, value = "//table[@class='rk-table']/thead/tr[1]/th["+str(cols_number)+"]/div/div/div/input[@class='head-bg']").click()
-        except:
-            tk_container.insert(tkinter.END, "Error, check if the selected ranking exists for the selected year\n\n")   
-            app.update() 
-        browser.find_element(by = By.XPATH, value = "//table[@class='rk-table']/thead/tr[1]/th["+str(cols_number)+"]/div/div/div[@class='rk-tooltip']/ul/li["+str(item_key)+"]").click()
+        #browser.find_element(by = By.XPATH, value = "//table[@class='rk-table']/thead/tr[1]/th["+str(cols_number)+"]/div/div/div/input[@class='head-bg']").click()  
+        #browser.find_element(by = By.XPATH, value = "//table[@class='rk-table']/thead/tr[1]/th["+str(cols_number)+"]/div/div/div[@class='rk-tooltip']/ul/li["+str(item_key)+"]").click()
+        el_head = browser.find_element(by = By.XPATH, value = "//table[@class='rk-table']/thead/tr[1]/th["+str(cols_number)+"]/div/div/div/input[@class='head-bg']")
+        browser.execute_script("arguments[0].click();", el_head)
+        el_li = browser.find_element(by = By.XPATH, value = "//table[@class='rk-table']/thead/tr[1]/th["+str(cols_number)+"]/div/div/div[@class='rk-tooltip']/ul/li["+str(item_key)+"]")
+        browser.execute_script("arguments[0].click();", el_li)
         result = []
-        for i in range(0,max_pages):
-            browser.find_element(by = By.XPATH, value = "//li[@title='"+str(i+1)+"']").click()
+        for i in range(0,int(max_pages)):
+            #browser.find_element(by = By.XPATH, value = "//li[@title='"+str(i+1)+"']").click()
+            el = browser.find_element(by = By.XPATH, value = "//li[@title='"+str(i+1)+"']")
+            browser.execute_script("arguments[0].click();", el)
             sleep(1)
             sub_scrap_shangai_table(browser,ranking,item_value,result)
         df_dict[f"df_{year}_{ranking}_{item_value}"] = pd.DataFrame(result)
@@ -99,6 +101,11 @@ def sub_grsssd_score_formula(x):
 def sub_calculate_world_score_and_rank(df_result, ranking):
     # on calcule le coefficient d'ajustement (à appliquer ensuite aux scores pondérés de chaque univ) sur la base d'univ n°1
     first = df_result.head(1)
+    #first = df_result[df_result[f"{ranking}_total_score"] == '100.0'].head(1)
+    #first = df_result.sort_values(by=f'{ranking}_total_score', ascending=False).head(1)
+    df_result.to_csv("result.csv",index=False,encoding="utf-8")
+    #first = df_result.iloc[[0]]
+    print(first)
     if ranking == "arwu":
         coeff = 100 / sub_arwu_score_formula(first)
         df_result["calculated_total_score"] = df_result.apply(lambda x: round(coeff * sub_arwu_score_formula(x),1), axis=1)
@@ -118,8 +125,9 @@ def calculate_each_criteria_data(df_dict, year, ranking):
          .drop(columns=[f"{ranking}_world_rank",f"{ranking}_total_score"])
          .sort_values(by=f'{item_value}_score', ascending=False)
          .reset_index()
-         .drop(columns=['level_0', 'index'])
+         .drop(columns=['level_0'])
          )
+        new_df_dict[f"df_{year}_{ranking}_{item_value}"]["index"] = new_df_dict[f"df_{year}_{ranking}_{item_value}"]["index"] + 1   
     return new_df_dict
 
 def calculate_main_data(df_dict, year, ranking):
@@ -132,30 +140,32 @@ def calculate_main_data(df_dict, year, ranking):
         for i in range(1,criteria_length):
             temp[str(i+1)] = pd.merge(temp[str(i)], df_dict[f"df_{year}_{ranking}_"+rankings_criteria_params[f"{ranking}_criteria_params"][i+1]][['univ_name', rankings_criteria_params[f"{ranking}_criteria_params"][i+1]+"_score", "calculated_"+rankings_criteria_params[f"{ranking}_criteria_params"][i+1]+"_world_rank","calculated_"+rankings_criteria_params[f"{ranking}_criteria_params"][i+1]+"_national_rank"]], how='inner', on=['univ_name'])
         df_all = sub_calculate_world_score_and_rank(temp[str(criteria_length)], ranking)
-        return (df_all
+        df_result = (df_all
          .sort_values(by='calculated_total_score', ascending=False)
          .reset_index()
-         .drop(columns=['level_0', 'index'])
+         .drop(columns=['level_0'])
          )
+        df_result["index"] = df_result["index"] + 1
+        return df_result
 
 def design_worksheet(ws):
     # lits of column names starting with "calculated" 
     list_cols_names=[]
     for cell in ws[1]:
         list_cols_names.append(cell.value)
+    # iterate all cols and fill them green
     list_calculated_cols_names = list(filter(lambda x: str(x)[0:10] == "calculated", list_cols_names))
-    # iterate all cols
     for column_cell in ws.iter_cols(1, ws.max_column):
         ws.column_dimensions[str(column_cell[0].column_letter)].width = 20
         if str(column_cell[0].value) in list_calculated_cols_names:
             ws.column_dimensions[str(column_cell[0].column_letter)].width = 30
             for row in column_cell[0:]:
                 row.fill = PatternFill("solid", start_color="5cb800")
-
+    
 def create_workbook(tk_container, df_dict,year, ranking):
     tk_container.insert(tkinter.END, "Design Excel results file...\n\n")
     app.update()
-    #wb = Workbook()
+    wb = Workbook()
     ## compile & insert & design all data
     ws_all = wb.active
     ws_all.title = "All"
@@ -175,14 +185,16 @@ def create_workbook(tk_container, df_dict,year, ranking):
     #wb.save("C:/Users/geoffroy/JupyterNotebooks/ranking_scrapping/tkinter.xlsx")
     return wb
 
-global wb
-wb = Workbook()
+#global wb
+#wb = Workbook()
 
 #################### UI ############################
 ####################################################
 
 customtkinter.set_appearance_mode("System")  # Modes: "System" (standard), "Dark", "Light"
 customtkinter.set_default_color_theme("blue")  # Themes: "blue" (standard), "green", "dark-blue"
+
+year_values = ["2022", "2021", "2020", "2019", "2018", "2017", "2016", "2015", "2014", "2013"]
 
 class App(customtkinter.CTk):
     def __init__(self):
@@ -225,7 +237,7 @@ class App(customtkinter.CTk):
         # year dropdown
         self.year_label = customtkinter.CTkLabel(self.sidebar_frame, text="Choisir une année", font=customtkinter.CTkFont(size=20, weight="bold"))
         self.year_label.grid(row=2, column=0, padx=10, pady=(5, 0))
-        self.year_mode_optionemenu = customtkinter.CTkOptionMenu(self.sidebar_frame, values=[str(m) for m in range(2013, 2023)][::-1], command=self.change_year_event)
+        self.year_mode_optionemenu = customtkinter.CTkOptionMenu(self.sidebar_frame, values=year_values, command=self.change_year_event)
         self.year_mode_optionemenu.grid(row=3, column=0, padx=5, pady=(10, 0))
 
         # Action buttons
@@ -252,7 +264,7 @@ class App(customtkinter.CTk):
         self.footer_frame = customtkinter.CTkFrame(self, width=1100, height=50)
         self.footer_frame.grid(row=6, column=0, columnspan=4, sticky="nsew")
         self.footer = customtkinter.CTkLabel(self.footer_frame, text="Powered by D2P Unversité Côte d'Azur")
-        self.footer.grid(padx=(500, 0), pady=(10, 0), sticky="nsew")
+        self.footer.grid(padx=300, pady=(10, 0), sticky="nsew")
 
         # set default values
         self.radio_button_arwu.configure(text="Classement ARWU")
@@ -261,11 +273,13 @@ class App(customtkinter.CTk):
         self.sidebar_button_scrap_all.configure(text="Scraper toutes les données")
         self.year_mode_optionemenu.set("2022")
         self.textbox.insert("0.0", "Ready to start\n\n")
+        self.wb = Workbook()
 
     def ranking_selection_event(self):
         print(self.ranking_selection.get())
 
     def change_year_event(self, selected_year: str):
+        print(selected_year)
         self.year_mode_optionemenu.set(selected_year)
 
     def sidebar_button_scraponepage_event(self):
@@ -287,11 +301,12 @@ class App(customtkinter.CTk):
     def download_file(self):
         file_path = tkinter.filedialog.asksaveasfilename(filetypes = [('All types(*.*)', '*.*'),("Excel file(*.xlsx)","*.xlsx")], defaultextension = [('All types(*.*)', '*.*'),("Excel file(*.xlsx)","*.xslx")])
         if file_path:
-            wb.save(file_path)
+            self.wb.save(file_path)
 
     def button_clear_event(self):
         self.textbox.delete("1.0",tkinter.END)
         self.textbox.insert("0.0", "Ready to start\n\n")
+        self.wb = Workbook()
 
 
 if __name__ == "__main__":
