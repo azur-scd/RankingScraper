@@ -39,7 +39,8 @@ L'outil :
 - Télécharger la dernière release 
 - Dézipper et installer n'importe où sur son PC (dans un emplacement accessible en écriture pour que le fichier de logs puisse s'incrémenter)
 - Double-cliquer pour lancer l'application
-- Accessoirement créer un raccourci clic droit sur RankingScrapper.exe -> Envoyer vers ...
+  - Accessoirement créer un raccourci clic droit sur RankingScrapper.exe -> Envoyer vers ...
+- la base de données sqlite se trouve dans <YOUR_PATH>/RankingScraper/db/
 
 
 ## [Dev] 
@@ -63,47 +64,5 @@ python app.py
 rankings.db est une bdd sqlite vide
 
 2. Zipper le tout et l'uploader en release dans Github
-
-### Packaging avec pyinstaller
-
-A la racine du projet 
-
-*Multi-files in /dist*
-```
-pyinstaller --noconfirm --onedir --windowed --add-data "C:/users/geoffroy/pythonapps/ranking-scrapper/venv_ranking/lib/site-packages/customtkinter;customtkinter/" "app.py"
-```
-
-*One executable file named RankingSraper in /dist and icone (but icon not working)*
-```
-pyinstaller --noconfirm --onefile --name RankingSraper --windowed --icon="C:/users/geoffroy/pythonapps/ranking-scrapper/assets/icone_cassiopeia.ico" --noconsole --add-data "C:/users/geoffroy/pythonapps/ranking-scrapper/venv_ranking/lib/site-packages/customtkinter;customtkinter/" "app.py"
-```
-
-*One executable file named RankingSraper in /dist and without icone*
-```
-pyinstaller --noconfirm --onefile --name RankingSraper --windowed --noconsole --add-data "C:/users/geoffroy/pythonapps/ranking-scrapper/venv_ranking/lib/site-packages/customtkinter;customtkinter/" "app.py"
-```
-
-L'exécutable se trouve dans le répertoire /dist
-
-### Pour mémoire, bidouille interne
-
-Charger le fichier Excel compilant toutes les données ARWU dans une bdd Sqlite
-
-```
-ranking_selection = "arwu"
-wb = load_workbook("C:/Users/geoffroy/Downloads/ARWU.xlsx")
-# sheet All
-ws = wb.active
-data = ws.values
-columns = next(data)[0:]
-df = pd.DataFrame(data, columns=columns).drop(columns=["index"])
-df['calculated_first_world_rank'] = range(1, 1+len(df))
-df = df.rename(columns={'N&S_score': 'NS_score', 'calculated_N&S_world_rank': 'calculated_NS_world_rank', 'calculated_N&S_national_rank': 'calculated_NS_national_rank', 'calculated_world_rank': 'calculated_dense_world_rank'})
-conn = sqlite3.connect('C:/Users/geoffroy/PythonApps/ranking-scrapper/dist/rankings.db')
-cur = conn.cursor()
-cur.execute(f"DROP TABLE IF EXISTS {ranking_selection}")
-cur.execute(f"CREATE TABLE {ranking_selection} ({','.join(map(str,df.columns)).replace('N&S', 'NS').replace('calculated_world_rank', 'calculated_dense_world_rank')})")
-df.to_sql(f"{ranking_selection}", conn, if_exists='append', index=False)
-```
 
 
