@@ -15,6 +15,7 @@ from openpyxl.styles import Color, PatternFill, Font, Border
 from openpyxl.styles import colors
 from openpyxl.cell import Cell
 from openpyxl.utils.dataframe import dataframe_to_rows
+import sqlite3
 
 ###################### FUNCTIONS #######################
 ########################################################
@@ -76,16 +77,19 @@ def get_shangai_data(tk_container,year=None, ranking=None, max_pages=None):
             sleep(1)
             sub_scrap_shangai_table(browser,ranking,item_value,result)
         df_dict[f"df_{year}_{ranking}_{item_value}"] = pd.DataFrame(result)
+        # add year column
         df_dict[f"df_{year}_{ranking}_{item_value}"]["year"] = year
-        # shift column 'year' to first position
+        # and shift column 'year' to first position
         first_column = df_dict[f"df_{year}_{ranking}_{item_value}"].pop('year')
         df_dict[f"df_{year}_{ranking}_{item_value}"].insert(0, 'year', first_column)
         # make sure the criteria score is number format
         df_dict[f"df_{year}_{ranking}_{item_value}"][f"{item_value}_score"] = pd.to_numeric(df_dict[f"df_{year}_{ranking}_{item_value}"][f"{item_value}_score"], downcast='integer', errors='coerce')
-        # add global rank on the argument criteria
-        df_dict[f"df_{year}_{ranking}_{item_value}"][f"calculated_{item_value}_world_rank"] = df_dict[f"df_{year}_{ranking}_{item_value}"][f"{item_value}_score"].rank(method="dense", ascending=False)
+        # add global rank on the argument criteria with dense method
+        df_dict[f"df_{year}_{ranking}_{item_value}"][f"calculated_{item_value}_dense_world_rank"] = df_dict[f"df_{year}_{ranking}_{item_value}"][f"{item_value}_score"].rank(method="dense", ascending=False)
+        # add global rank on the argument criteria with first method
+        df_dict[f"df_{year}_{ranking}_{item_value}"][f"calculated_{item_value}_first_world_rank"] = df_dict[f"df_{year}_{ranking}_{item_value}"][f"{item_value}_score"].rank(method="first", ascending=False)
         # add national rank on the argument criteria
-        df_dict[f"df_{year}_{ranking}_{item_value}"][f"calculated_{item_value}_national_rank"] = df_dict[f"df_{year}_{ranking}_{item_value}"].groupby(["country"])[f"{item_value}_score"].rank(method="dense", ascending=False)
+        df_dict[f"df_{year}_{ranking}_{item_value}"][f"calculated_{item_value}_national_rank"] = df_dict[f"df_{year}_{ranking}_{item_value}"].groupby(["country"])[f"{item_value}_score"].rank(method="first", ascending=False)
         # reset index
         df_dict[f"df_{year}_{ranking}_{item_value}"] = df_dict[f"df_{year}_{ranking}_{item_value}"].reset_index()
     # close selenium driver
@@ -103,7 +107,6 @@ def sub_calculate_world_score_and_rank(df_result, ranking):
     first = df_result.head(1)
     #first = df_result[df_result[f"{ranking}_total_score"] == '100.0'].head(1)
     #first = df_result.sort_values(by=f'{ranking}_total_score', ascending=False).head(1)
-    df_result.to_csv("result.csv",index=False,encoding="utf-8")
     #first = df_result.iloc[[0]]
     print(first)
     if ranking == "arwu":
@@ -114,8 +117,9 @@ def sub_calculate_world_score_and_rank(df_result, ranking):
         df_result["calculated_total_score"] = df_result.apply(lambda x: round(coeff * sub_grsssd_score_formula(x),1), axis=1)
     # make sure the score is number format
     df_result["calculated_total_score"] = pd.to_numeric(df_result["calculated_total_score"], downcast='integer', errors='coerce')
-    df_result["calculated_world_rank"] = df_result["calculated_total_score"].rank(method="dense", ascending=False)
-    df_result["calculated_national_rank"] = df_result.groupby(["country"])["calculated_total_score"].rank(method="dense", ascending=False)
+    df_result["calculated_dense_world_rank"] = df_result["calculated_total_score"].rank(method="dense", ascending=False)
+    df_result["calculated_first_world_rank"] = df_result["calculated_total_score"].rank(method="first", ascending=False)
+    df_result["calculated_national_rank"] = df_result.groupby(["country"])["calculated_total_score"].rank(method="first", ascending=False)
     return df_result
 
 def calculate_each_criteria_data(df_dict, year, ranking):
@@ -125,9 +129,8 @@ def calculate_each_criteria_data(df_dict, year, ranking):
          .drop(columns=[f"{ranking}_world_rank",f"{ranking}_total_score"])
          .sort_values(by=f'{item_value}_score', ascending=False)
          .reset_index()
-         .drop(columns=['level_0'])
+         .drop(columns=['level_0', 'index'])
          )
-        new_df_dict[f"df_{year}_{ranking}_{item_value}"]["index"] = new_df_dict[f"df_{year}_{ranking}_{item_value}"]["index"] + 1   
     return new_df_dict
 
 def calculate_main_data(df_dict, year, ranking):
@@ -138,14 +141,13 @@ def calculate_main_data(df_dict, year, ranking):
         temp["1"] = df_dict[f"df_{year}_{ranking}_"+rankings_criteria_params[f"{ranking}_criteria_params"][1]]
         # puis on loop en ne conservant que les colonnes calculées des autres critères
         for i in range(1,criteria_length):
-            temp[str(i+1)] = pd.merge(temp[str(i)], df_dict[f"df_{year}_{ranking}_"+rankings_criteria_params[f"{ranking}_criteria_params"][i+1]][['univ_name', rankings_criteria_params[f"{ranking}_criteria_params"][i+1]+"_score", "calculated_"+rankings_criteria_params[f"{ranking}_criteria_params"][i+1]+"_world_rank","calculated_"+rankings_criteria_params[f"{ranking}_criteria_params"][i+1]+"_national_rank"]], how='inner', on=['univ_name'])
+            temp[str(i+1)] = pd.merge(temp[str(i)], df_dict[f"df_{year}_{ranking}_"+rankings_criteria_params[f"{ranking}_criteria_params"][i+1]][['univ_name', rankings_criteria_params[f"{ranking}_criteria_params"][i+1]+"_score", "calculated_"+rankings_criteria_params[f"{ranking}_criteria_params"][i+1]+"_dense_world_rank","calculated_"+rankings_criteria_params[f"{ranking}_criteria_params"][i+1]+"_first_world_rank","calculated_"+rankings_criteria_params[f"{ranking}_criteria_params"][i+1]+"_national_rank"]], how='inner', on=['univ_name'])
         df_all = sub_calculate_world_score_and_rank(temp[str(criteria_length)], ranking)
         df_result = (df_all
          .sort_values(by='calculated_total_score', ascending=False)
          .reset_index()
-         .drop(columns=['level_0'])
+         .drop(columns=['level_0', 'index'])
          )
-        df_result["index"] = df_result["index"] + 1
         return df_result
 
 def design_worksheet(ws):
@@ -173,6 +175,12 @@ def create_workbook(tk_container, df_dict,year, ranking):
     for r in dataframe_to_rows(all_data, index=False, header=True):
          ws_all.append(r)
     design_worksheet(ws_all)
+    ## compile and design only global data
+    ws_global = wb.create_sheet("global")
+    global_data = all_data[["year", f"{ranking}_world_rank", "univ_name", "country", f"{ranking}_total_score", "calculated_total_score","calculated_dense_world_rank","calculated_first_world_rank","calculated_national_rank"]]
+    for r in dataframe_to_rows(global_data, index=False, header=True):
+         ws_global.append(r)
+    design_worksheet(ws_global)
     ## compile & insert & design all data
     each_criteria_data = calculate_each_criteria_data(df_dict, year, ranking)
     for item_value in rankings_criteria_params[f"{ranking}_criteria_params"].values():
@@ -245,9 +253,10 @@ class App(customtkinter.CTk):
         self.sidebar_button_scrap_pageone.grid(row=4, column=0, padx=20, pady=(15,0))
         self.sidebar_button_scrap_all = customtkinter.CTkButton(self.sidebar_frame, fg_color="#4EC687", text_color="#040504", command=self.sidebar_button_scrapall_event)
         self.sidebar_button_scrap_all.grid(row=5, column=0, padx=5, pady=(2,10))
+
         # create textbox
         self.textbox = customtkinter.CTkTextbox(self, width=650, fg_color="#040504", text_color="#E9F3E9")
-        self.textbox.grid(row=0, column=1, rowspan=2, padx=(20, 20), pady=(5, 0), sticky="nsew")
+        self.textbox.grid(row=0, column=1, rowspan=2, columnspan=2, padx=(20, 20), pady=(5, 0), sticky="nsew")
 
         # clear button
         #self.button_clear = customtkinter.CTkButton(self, text="Effacer", fg_color="#FA655C", border_width=2, text_color="#040504", command=self.button_clear_event)
@@ -257,8 +266,10 @@ class App(customtkinter.CTk):
         # Download button
         self.download_excel_result = customtkinter.CTkButton(self, text="Télécharger le fichier de résultats (Excel)", fg_color="#4EC687", text_color="#040504",
                                                            command=self.download_file)
-
-        self.download_excel_result.grid(row=2, column=1, padx=20, pady=(10, 10))
+        self.download_excel_result.grid(row=2, column=1, padx=5, pady=(10, 10))
+        self.save_sqlite_result = customtkinter.CTkButton(self, text="Sauvegarder dans Sqlite", fg_color="#4EC687", text_color="#040504",
+                                                           command=self.save_sqlite)
+        self.save_sqlite_result.grid(row=2, column=2, padx=5, pady=(10, 10))
 
         # Credits 
         self.footer_frame = customtkinter.CTkFrame(self, width=1100, height=50)
@@ -302,6 +313,20 @@ class App(customtkinter.CTk):
         file_path = tkinter.filedialog.asksaveasfilename(filetypes = [('All types(*.*)', '*.*'),("Excel file(*.xlsx)","*.xlsx")], defaultextension = [('All types(*.*)', '*.*'),("Excel file(*.xlsx)","*.xslx")])
         if file_path:
             self.wb.save(file_path)
+
+    def save_sqlite(self):
+        ws = self.wb["All"]
+        data = ws.values
+        columns = next(data)[0:]
+        df = pd.DataFrame(data, columns=columns)
+        df['rank'] = range(1, 1+len(df))
+        df = df.rename(columns={'N&S_score': 'NS_score', 'calculated_N&S_world_rank': 'calculated_NS_world_rank', 'calculated_N&S_national_rank': 'calculated_NS_national_rank'})
+        conn = sqlite3.connect('./db/rankings.db')
+        cur = conn.cursor()
+        cur.execute(f"DROP TABLE IF EXISTS {self.ranking_selection.get()}_{self.year_mode_optionemenu.get()}")
+        cur.execute(f"CREATE TABLE {self.ranking_selection.get()}_{self.year_mode_optionemenu.get()} ({','.join(map(str,df.columns)).replace('N&S', 'NS')})")
+        df.to_sql(f"{self.ranking_selection.get()}_{self.year_mode_optionemenu.get()}", conn, if_exists='append', index=False)
+        self.textbox.insert(tkinter.END, "Save in Sqlite DB...\n\n")
 
     def button_clear_event(self):
         self.textbox.delete("1.0",tkinter.END)
