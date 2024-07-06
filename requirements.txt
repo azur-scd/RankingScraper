@@ -2,7 +2,7 @@ altgraph==0.17.3
 async-generator==1.10
 attrs==22.2.0
 beautifulsoup4==4.11.1
-certifi==2023.7.22
+certifi==2024.7.4
 cffi==1.15.1
 charset-normalizer==3.0.1
 contourpy==1.0.7
